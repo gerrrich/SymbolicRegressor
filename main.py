@@ -3,6 +3,51 @@ import operator
 import math
 
 
+# Определяем функции для генетического программирования
+def add(left, right):
+    return f'({left} + {right})'
+
+
+def subtract(left, right):
+    return f'({left} - {right})'
+
+
+def multiply(left, right):
+    return f'({left} * {right})'
+
+
+def divide(left, right):
+    if right == 0:
+        return 1
+    return f'({left} / {right})'
+
+
+def sin(value):
+    return f'sin({value})'
+
+
+def cos(value):
+    return f'cos({value})'
+
+
+def exp(value):
+    return f'exp({value})'
+
+
+def sqrt(value):
+    return f'√({value})'
+
+
+def minus(value):
+    return f'(-{value})'
+
+
+# Определяем список функций и переменных, которые могут быть использованы для построения символьных выражений
+operators = [add, subtract, multiply, divide]
+functions = [sin, cos, exp, sqrt, minus]
+variables = ['x', 'y', 'z']
+
+
 # Определяем функцию для создания случайного символьного выражения
 def generate_expression(depth):
     if depth == 0:
@@ -18,6 +63,17 @@ def generate_expression(depth):
     else:
         value = generate_expression(depth - 1)
         return task(value)
+
+
+# Определяем функцию для оценки точности символьного выражения
+def evaluate(expression, x, y, z):
+    try:
+        value = eval(expression, {'__builtins__': None},
+                     {'x': x, 'y': y, 'z': z, 'sin': math.sin, 'cos': math.cos, 'exp': math.exp, '√': math.sqrt, 'minus': lambda x: -x})
+        return value
+        # return abs(value)
+    except:
+        return float('inf')
 
 
 # Определяем функцию для эволюции символьных выражений с использованием генетического программирования
