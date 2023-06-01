@@ -133,22 +133,43 @@ def work(population):
             print(f'Максимум функции: {new_score} в точке: {x}')
             print(f'Количество итераций: {count}')
 
-
             return (x, new_score), count
 
     except MemoryError:
         print('Популяция слишком велика. Произошло переполнение памяти.')
 
 
-f = lambda x1, x2: x1 * np.sin(x2)
+def two_dimensions():
+    f = lambda x: x * np.sin(x)
+    population = Population(f, 2, 10, 10, 10, np.array([10]), np.array([-10]), 0.1)
 
-population = Population(f, 3, 10, 10, 10, np.array([10, 10]), np.array([-10, -10]), 0.1)
+    point, count = work(population)
 
-point, count = work(population)
+    x = np.arange(-10, 10, 0.1)
+    plt.plot(x, f(x), 'r')
+    plt.plot(point[0], point[1], 'oy')
 
-x1 = np.linspace(-10, 10, 200)
-x2 = np.linspace(-10, 10, 200)
-# plt.plot(x, f(x), 'r')
-# plt.plot(point[0],point[1], 'oy')
-plt.
-plt.show()
+    plt.show()
+
+
+def three_dimensions():
+    f = lambda x: 15 - x[0] * x[0] - x[1] * x[1]
+    population = Population(f, 3, 10, 10, 10, np.array([10, 10]), np.array([-10, -10]), 0.1)
+
+    point, count = work(population)
+
+    x = np.arange(-15, 15, 0.1)
+    y = np.arange(-15, 15, 0.1)
+    x, y = np.meshgrid(x, y)
+    z = f(np.array([x, y]))
+
+    fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+    ax.plot_surface(x, y, z)
+
+    ax.scatter(point[0][0], point[0][1], point[1], marker='o', color='r', s=20 ** 2)
+
+    plt.show()
+
+
+two_dimensions()
+three_dimensions()
