@@ -2,6 +2,7 @@ import math
 import random
 
 import numpy as np
+import gc
 
 
 def fitness_function(expression, x_mappings, y):
@@ -35,9 +36,11 @@ def evaluate_tree(node, x_mappings):
 def initialize_population(max_depth, population_size, unary_operators, binary_operators, operands, constants):
     population = []
 
-    for i in range(population_size):
+    while len(population) < population_size:
         tree = generate_random_tree(max_depth, unary_operators, binary_operators, operands, constants)
-        population.append(tree)
+
+        if tree not in population:
+            population.append(tree)
 
     return population
 
@@ -65,7 +68,13 @@ def generate_random_tree(max_depth, unary_operators, binary_operators, operands,
                             generate_random_tree(max_depth - 1, unary_operators, binary_operators, operands, constants), 'binary_operator')
 
 
+def minus(x):
+    return -x
+
+
 class Node:
+    mapping = None
+
     def __init__(self, value, left=None, right=None, type='operand'):
         self.value = value
         self.left = left
@@ -82,6 +91,29 @@ class Node:
         elif self.type == 'binary_operator':
             return Node(self.value, self.left.copy(), self.right.copy(), 'binary_operator')
 
+    def __str__(self):
+        if self.type == 'operand':
+            return str(self.value)
+        elif self.type == 'constant':
+            return str(self.value)
+        elif self.type == 'unary_operator':
+            if self.value == minus:
+                return f'(-({self.left}))'
+            else:
+                return f'{Node.mapping[self.value]}({self.left})'
+        elif self.type == 'binary_operator':
+            return f'({self.left} {Node.mapping[self.value]} {self.right})'
+
+    def __eq__(self, other):
+        if self.type == 'operand':
+            return self.value == other.value
+        elif self.type == 'constant':
+            return self.value == other.value
+        elif self.type == 'unary_operator':
+            return self.value == other.value and self.left == other.left
+        elif self.type == 'binary_operator':
+            return self.value == other.value and self.left == other.left and self.right == other.right
+
 
 def selection(population, fitness, selection_size):
     best_indices = np.argsort(fitness)[:selection_size]
@@ -89,13 +121,16 @@ def selection(population, fitness, selection_size):
 
 
 def crossover(parent1, parent2):
-    if parent1.type in ['operand', 'constant'] or parent2.type in ['operand', 'constant']:
-        return parent2.copy(), parent1.copy()
+    paret1_copy = parent1.copy()
+    paret2_copy = parent2.copy()
 
-    nodes1 = get_tree_nodes(parent1.copy(), need_root=False)
+    if parent1.type in ['operand', 'constant'] or parent2.type in ['operand', 'constant']:
+        return paret2_copy, paret1_copy
+
+    nodes1 = get_tree_nodes(paret1_copy, need_root=False)
     node1, depth1 = random.choice(nodes1)
 
-    nodes2 = get_tree_nodes_with_depth(parent2.copy(), target=depth1)
+    nodes2 = get_tree_nodes_with_depth(paret2_copy, target=depth1)
     node2, depth2 = random.choice(nodes2)
 
     temp = node1.left
@@ -114,22 +149,38 @@ def crossover(parent1, parent2):
     node1.type = node2.type
     node2.type = temp
 
-    return parent1, parent2
+    return paret1_copy, paret2_copy
 
 
 def mutate(expression, max_depth, mutation_probability, unary_operators, binary_operators, operands, constants):
     node = random.choice(get_tree_nodes(expression))[0]
 
-    if node.type == 'operand':
-        node.value = random.choice(operands)
-    elif node.type == 'constant':
-        node.value = random.choice(constants)
-    elif node.type == 'unary_operator':
-        node.value = random.choice(unary_operators)
-    elif node.type == 'binary_operator':
-        node.value = random.choice(binary_operators)
+    if random.random() < mutation_probability:
+        if node.type == 'operand':
+            node.value = random.choice([i for i in operands if i != node.value])
+        elif node.type == 'constant':
+            node.value = random.choice([i for i in constants if i != node.value])
+        elif node.type == 'unary_operator':
+            node.value = random.choice([i for i in unary_operators if i != node.value])
+        elif node.type == 'binary_operator':
+            node.value = random.choice([i for i in binary_operators if i != node.value])
 
     return expression
+
+
+# def mutate(expression, max_depth, mutation_probability, unary_operators, binary_operators, operands, constants):
+#     expression = expression.copy()
+#     node, depth = random.choice(get_tree_nodes(expression))
+#
+#     if random.random() < mutation_probability:
+#         new_node = generate_random_tree(max_depth - depth, unary_operators, binary_operators, operands, constants)
+#
+#         node.value = new_node.value
+#         node.left = new_node.left
+#         node.right = new_node.right
+#         node.type = new_node.type
+#
+#     return expression
 
 
 def get_tree_nodes_with_depth(node, target, depth=0):
@@ -167,14 +218,24 @@ def symbolic_regression(x_train_mappings, y_train, max_depth, population_size, m
 
     best_expressions = []
     best_expression = None
+    best_fitness = None
+    counter = 0
 
     for generation in range(max_generations):
+        gc.collect()
         parents, fitness = selection(population, fitness, selection_size)
-
+        if best_fitness == fitness[0]:
+            counter += 1
+        if counter == 100:
+            population = initialize_population(max_depth, population_size, unary_operators, binary_operators, operands, constants)
+            fitness = [fitness_function(expression, x_train_mappings, y_train) for expression in population]
+            counter = 0
+            continue
         best_expression = parents[0]
+        best_fitness = fitness[0]
         best_expressions.append(best_expression)
 
-        print("Generation:", generation, "Best fitness:", fitness[0])
+        print("Generation:", generation, "Best fitness:", best_fitness, "Average fitness:", np.mean(fitness))
 
         children = []
 
@@ -190,43 +251,50 @@ def symbolic_regression(x_train_mappings, y_train, max_depth, population_size, m
             children.append(child1)
             children.append(child2)
 
-        population = parents + children
+        population = []
+
+        for child in children + parents:
+            if child not in population:
+                population.append(child)
+
+        if len(population) < population_size:
+            while len(population) < population_size:
+                population.append(generate_random_tree(max_depth, unary_operators, binary_operators, operands, constants))
+
         fitness = [fitness_function(expression, x_train_mappings, y_train) for expression in population]
 
-        # best_indices = np.argsort(fitness)[:population_size]
-        # population = [population[i] for i in best_indices]
-        # fitness = [fitness[i] for i in best_indices]
+        if fitness[0] <= 0.00001:
+            break
 
-    return best_expression, best_expressions
+    ind = np.argmin([fitness_function(expression, x_train_mappings, y_train) for expression in best_expressions])
+    return best_expressions[ind], best_expressions
 
 
 def target_function(x):
-    return np.sin(x[:, 0]) * np.cos(x[:, 1]) + np.exp(x[:, 2])
+    return x[:, 0] * np.log(x[:, 1]) - np.exp(x[:, 2])
 
 
-x_train = np.sort(np.random.uniform(-np.pi, np.pi, size=(100, 3)))
+x_train = np.sort(np.random.uniform(1, 5, size=(50, 3)))
 y_train = target_function(x_train)
 
-
-def minus(x):
-    return -x
-
-
-max_depth = 4
+max_depth = 3
 population_size = 20
-max_generations = 50
 selection_size = 10
-mutation_probability = 0.1
+max_generations = 1000
+mutation_probability = 1
 
 operands = ['x1', 'x2', 'x3']
-constants = [np.pi]
-unary_operators = [np.sin, np.cos, minus, np.log10, np.log, np.exp]
-binary_operators = [np.add, np.subtract, np.multiply, np.divide, np.power]
+# constants = [np.pi]
+constants = []
+unary_operators = {np.exp: 'exp', minus: '-', np.log: 'ln'}
+binary_operators = {np.add: '+', np.multiply: '*', np.power: '^'}
+
+Node.mapping = {**unary_operators, **binary_operators}
 
 x_train_mappings = [{operands[j]: x_train[i, j] for j in range(x_train.shape[1])} for i in range(x_train.shape[0])]
 
 best_individual, best_individuals = symbolic_regression(x_train_mappings, y_train, max_depth, population_size, max_generations, selection_size, mutation_probability,
-                                                        unary_operators, binary_operators, operands, constants)
+                                                        list(unary_operators.keys()), list(binary_operators.keys()), operands, constants)
 
 print("Best individual:", best_individual)
 print("Fitness:", fitness_function(best_individual, x_train_mappings, y_train))
